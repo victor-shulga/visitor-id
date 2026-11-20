@@ -5,6 +5,8 @@
     python3 export.py --days 30 --min-visits 2
 
 One row per company (domain), the strongest evidence first: most visits, then pricing/case pages.
+utm_source / utm_campaign / ref are read from the visited page url (see «Мітки» in README).
+A visit with ref=<contact id> is a known person coming back: always route A.
 Needs `npx wrangler login` done once in this folder.
 """
 import argparse
@@ -13,6 +15,7 @@ import json
 import subprocess
 from datetime import date
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 HOT = ("pricing", "price", "case", "contact", "offer", "services")  # pages that show buying intent
 
@@ -24,18 +27,30 @@ def query(days):
     return json.loads(out)[0]["results"]
 
 
+def marks(url):
+    """utm_source, utm_campaign and ref from a page url ('' when absent)."""
+    q = parse_qs(urlparse(url or "").query)
+    return {k: (q.get(k) or [""])[0].strip().lower() for k in ("utm_source", "utm_campaign", "ref")}
+
+
+def joined(vs, key):
+    return " ".join(sorted({marks(v.get("page"))[key] for v in vs} - {""}))
+
+
 def to_signals(rows, min_visits=1, today=None):
     today = today or date.today()
     by = {}
     for r in rows:
-        key = r.get("domain") or r.get("linkedin_url")
+        ref = marks(r.get("page"))["ref"]
+        key = r.get("domain") or r.get("linkedin_url") or (ref and "ref:" + ref)
         if key:
             by.setdefault(key, []).append(r)
     sig = []
     for key, vs in by.items():
         if len(vs) < min_visits:
             continue
-        hot = [v for v in vs if any(h in (v.get("page") or "").lower() for h in HOT)]
+        hot = [v for v in vs if any(h in urlparse(v.get("page") or "").path.lower() for h in HOT)]
+        refs = joined(vs, "ref")
         last = max(vs, key=lambda v: v["seen_at"])
         people = sorted({f"{v.get('first_name') or ''} {v.get('last_name') or ''} ({v.get('title') or '?'})".strip()
                          for v in vs if v.get("linkedin_url")})
@@ -48,7 +63,10 @@ def to_signals(rows, min_visits=1, today=None):
             "signal_age_days": (today - date.fromisoformat(last["seen_at"][:10])).days,
             "signal_evidence_url": (hot[-1] if hot else last).get("page") or "",
             "signal_summary": f"{len(vs)} візит(и), гарячих сторінок {len(hot)}; люди: {'; '.join(people) or 'лише компанія'}",
-            "signal_route": "A" if hot or len(vs) >= 3 else "B",
+            "signal_route": "A" if hot or refs or len(vs) >= 3 else "B",
+            "utm_source": joined(vs, "utm_source"),
+            "utm_campaign": joined(vs, "utm_campaign"),
+            "ref": refs,
             "linkedin_urls": " ".join(sorted({v['linkedin_url'] for v in vs if v.get('linkedin_url')})),
         })
     return sorted(sig, key=lambda s: (s["signal_route"], -s["visits"]))

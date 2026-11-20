@@ -15,4 +15,15 @@ assert s[0]["signal_age_days"] == 1 and "Ann Lee (CTO)" in s[0]["signal_summary"
 assert s[1]["signal_route"] == "B"
 assert to_signals(rows, min_visits=2, today=date(2026, 11, 20))[0]["domain"] == "acme.com"
 assert len(to_signals(rows, min_visits=2, today=date(2026, 11, 20))) == 1
+from export import marks
+assert marks("https://you.com/pricing?utm_source=LinkedIn&utm_campaign=long-hiring&ref=C42") == {"utm_source": "linkedin", "utm_campaign": "long-hiring", "ref": "c42"}
+assert marks(None) == {"utm_source": "", "utm_campaign": "", "ref": ""}
+tagged = [
+    {"domain": "gamma.de", "seen_at": "2026-11-19T09:00:00", "page": "https://you.com/blog/a?utm_source=email&utm_campaign=long-hiring&ref=c42"},
+    {"domain": None, "linkedin_url": None, "seen_at": "2026-11-19T10:00:00", "page": "https://you.com/?ref=c77"},
+]
+t = {x["domain"] or x["ref"]: x for x in to_signals(tagged, today=date(2026, 11, 20))}
+assert t["gamma.de"]["signal_route"] == "A" and t["gamma.de"]["utm_campaign"] == "long-hiring" and t["gamma.de"]["ref"] == "c42"
+assert t["c77"]["signal_route"] == "A", "ref-only visit becomes a row"
+assert to_signals(rows, today=date(2026, 11, 20))[1]["utm_source"] == ""
 print("export test ok")

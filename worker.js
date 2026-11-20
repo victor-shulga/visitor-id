@@ -42,7 +42,7 @@ export default {
     let body;
     try { body = await req.json(); } catch { return new Response("bad json", { status: 400 }); }
     const r = normalize(body);
-    if (!r.linkedin_url && !r.domain) return new Response("skipped: no person, no company");
+    if (!r.linkedin_url && !r.domain && !/[?&]ref=/.test(r.page || "")) return new Response("skipped: no person, no company, no ref");
     const cols = Object.keys(r);
     await env.DB.prepare(
       `INSERT OR IGNORE INTO visit (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`

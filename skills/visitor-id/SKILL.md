@@ -55,13 +55,23 @@ Never print or store the secret in chat. The hook URL is `https://visitor-id.<ac
 
 Send one test visit and check it landed: `npx wrangler d1 execute visitor-id --remote --command "SELECT * FROM visit ORDER BY seen_at DESC LIMIT 3"`.
 
+## 3b. Tag every outgoing link
+
+Visits only become attributable when links carry marks. Help the user set them up (README «Мітки» has the full table):
+- `utm_source` = channel (`linkedin`, `email`, `post`, `signature`, `leadmagnet`), `utm_medium` = touch type (`outreach`, `organic`, `dm`), `utm_campaign` = the hypothesis or campaign name exactly as in the sending tool. Latin, lowercase, hyphens.
+- `ref` = the contact's CRM ID, through a custom field in the sending tool (`{{crm_id}}` in Instantly, `{crm_id}` in HeyReach). Make sure the field is filled when the list is uploaded.
+- Never put an email or a name into a URL: only the ID.
+- No marks on internal links of the site.
+
+`export.py` reads `utm_source`, `utm_campaign` and `ref` from the visited page URL. A visit with `ref` is a known person coming back: route A, in any country, even when no tool identified the company.
+
 ## 4. Weekly export
 
 ```bash
 python3 export.py --days 7            # state/visitor_signals.csv
 ```
 
-One row per company. Columns match the signal block of a prospect list: `signal_type`, `signal_date`, `signal_age_days`, `signal_evidence_url`, `signal_summary`, `signal_route`, plus `visits` and `linkedin_urls`.
+One row per company. Columns match the signal block of a prospect list: `signal_type`, `signal_date`, `signal_age_days`, `signal_evidence_url`, `signal_summary`, `signal_route`, plus `visits`, `linkedin_urls`, `utm_source`, `utm_campaign` and `ref`.
 
 - **Route A**: looked at pricing, cases, contact or services pages, or came 3+ times. Write this week.
 - **Route B**: everything else. Wait for a second signal.

@@ -13,9 +13,12 @@ const env = { HOOK_SECRET: "s3", DB: { prepare: (sql) => ({ bind: (...a) => ({ r
 const post = (path, body) => worker.fetch(new Request("https://x" + path, { method: "POST", body: JSON.stringify(body) }), env);
 
 assert.equal((await post("/hook/wrong", {})).status, 404);
-assert.equal(await (await post("/hook/s3", { "Title": "CTO" })).text(), "skipped: no person, no company");
+assert.equal(await (await post("/hook/s3", { "Title": "CTO" })).text(), "skipped: no person, no company, no ref");
 assert.equal(bound, null);
 assert.equal((await post("/hook/s3", { "LinkedIn URL": "https://linkedin.com/in/a", "Website": "acme.com" })).status, 200);
 assert.match(bound.sql, /^INSERT OR IGNORE INTO visit/);
+bound = null;
+assert.equal((await post("/hook/s3", { "Captured URL": "https://you.com/cases?ref=c42" })).status, 200);
+assert.ok(bound, "a visit with only ref= is kept");
 assert.equal((await worker.fetch(new Request("https://x/health"), env)).status, 200);
 console.log("visitor-id test ok");
