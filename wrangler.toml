@@ -1,0 +1,9 @@
+name = "visitor-id"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+# The hook URL carries a secret: npx wrangler secret put HOOK_SECRET  (any long random string).
+
+[[d1_databases]]
+binding = "DB"
+database_name = "visitor-id"
+database_id = "___database-id"
