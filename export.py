@@ -21,7 +21,7 @@ HOT = ("pricing", "price", "case", "contact", "offer", "services")  # pages that
 
 
 def query(days):
-    sql = (f"SELECT * FROM visit WHERE seen_at >= datetime('now', '-{int(days)} days') ORDER BY seen_at")
+    sql = (f"SELECT * FROM visit_all WHERE seen_at >= datetime('now', '-{int(days)} days') ORDER BY seen_at")
     out = subprocess.run(["npx", "wrangler", "d1", "execute", "visitor-id", "--remote", "--json", "--command", sql],
                          capture_output=True, text=True, check=True).stdout
     return json.loads(out)[0]["results"]

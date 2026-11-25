@@ -1,6 +1,6 @@
 // node test.mjs  → "visitor-id test ok"  (no network)
 import assert from "node:assert/strict";
-import worker, { normalize, toSignals, toCsv } from "./worker.js";
+import worker, { normalize, toSignals, toCsv, noise, pickCompany, asnCompany, daily } from "./worker.js";
 
 const r = normalize({ "LinkedIn URL": "https://linkedin.com/in/a", "Company Name": "Acme", "Website": "https://www.Acme.com/about",
   "Captured URL": "https://you.com/pricing", "Tags": ["Hot Pages", "ICP"], "Seen At": "2026-11-20T10:00:00Z" });
@@ -50,4 +50,49 @@ assert.doesNotMatch((await import("./worker.js")).page(evil, 7, "/view/k"), /<sc
 const csvRes = await get("/view/v9/visits.csv?days=7");
 assert.match(csvRes.headers.get("content-type"), /text\/csv/);
 assert.match(await csvRes.text(), /^domain,company,visits/);
+
+// own collector: filters
+assert.equal(noise("Mozilla/5.0 Chrome/120", { asn: 3320, asOrganization: "Acme Corp" }, "/pricing"), "");
+assert.equal(noise("Googlebot/2.1", {}, "/"), "bot");
+assert.equal(noise("Mozilla/5.0", { asn: 16509, asOrganization: "Amazon.com" }, "/"), "hosting");
+assert.equal(noise("Mozilla/5.0", { asOrganization: "T-Mobile USA" }, "/"), "mobile");
+assert.equal(noise("Mozilla/5.0", { asOrganization: "Acme" }, "/.env"), "probe");
+
+// MoltSets answer → company, same rule as the author's tracker
+assert.deepEqual(pickCompany({ status: "ok", results: [{ companies: [{ domain: "https://www.acme.com", percentage: 0.8 }, { domain: "x.com", percentage: 0.1 }] }] }),
+  { status: "ok", domain: "acme.com", company: null, conf: 0.8 });
+assert.equal(pickCompany({ status: "ok", results: [{ companies: [{ domain: "a.com", percentage: 0.4 }, { domain: "b.com", percentage: 0.3 }] }] }).status, "low");
+assert.equal(pickCompany({ status: "ok", results: [{ companies: [{ domain: "namecheap.com", percentage: 0.9 }] }] }).status, "hosting");
+assert.equal(pickCompany({ status: "ok", results: [{ companies: [{ domain: "gmail.com", percentage: 0.9 }] }] }).status, "low");
+assert.equal(pickCompany({ status: "not_found" }).status, "not_found");
+assert.deepEqual(asnCompany("Acme Software GmbH"), { status: "asn", company: "Acme Software GmbH" });
+assert.equal(asnCompany("Comcast Cable Communications").status, "not_found");
+
+// /t.js and /t
+const js = await (await worker.fetch(new Request("https://vid.example.workers.dev/t.js"), {})).text();
+assert.match(js, /https:\/\/vid\.example\.workers\.dev\/t/);
+let hits = [];
+const hitEnv = { SITE_HOSTS: "you.com", DB: { prepare: (sql) => ({ bind: (...a) => ({ run: async () => hits.push({ sql, a }) }) }) } };
+const beacon = (body, ua = "Mozilla/5.0 Chrome/120", cf = { asn: 3320, asOrganization: "Acme Corp", country: "US" }) => {
+  const r = new Request("https://vid/t", { method: "POST", body: JSON.stringify(body), headers: { "User-Agent": ua, "CF-Connecting-IP": "1.2.3.4" } });
+  Object.defineProperty(r, "cf", { value: cf });
+  return worker.fetch(r, hitEnv);
+};
+assert.equal((await beacon({ u: "https://www.you.com/pricing?ref=c42", r: "https://linkedin.com", id: "u1" })).status, 204);
+assert.equal(hits.length, 1);
+assert.match(hits[0].sql, /^INSERT INTO hit/);
+assert.equal(hits[0].a[2], "1.2.3.4");
+await beacon({ u: "https://other.com/", id: "u1" });
+await beacon({ u: "https://you.com/", id: "u1" }, "Googlebot");
+await beacon({ u: "https://you.com/", id: "u1" }, undefined, { asn: 16509, asOrganization: "Amazon.com" });
+assert.equal(hits.length, 1, "foreign site, bot and hosting are not visits");
+
+// daily: resolve, write company into page views, wipe old IPs
+const calls = [];
+const dEnv = { DB: { prepare: (sql) => ({ bind: (...a) => ({ all: async () => ({ results: [{ ip: "1.2.3.4", org: "Acme Software GmbH" }, { ip: "5.6.7.8", org: "Comcast Cable" }] }),
+  run: async () => calls.push({ sql, a }) }), run: async () => calls.push({ sql, a: [] }) }) } };
+assert.equal(await daily(dEnv), 2);
+const ins = calls.filter((c) => /INSERT OR REPLACE INTO ip_company/.test(c.sql)).map((c) => c.a.slice(0, 4));
+assert.deepEqual(ins, [["1.2.3.4", "asn", null, "Acme Software GmbH"], ["5.6.7.8", "not_found", null, null]]);
+assert.ok(calls.some((c) => /SET ip = NULL/.test(c.sql)), "old IPs are wiped");
 console.log("visitor-id test ok");

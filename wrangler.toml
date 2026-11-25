@@ -8,3 +8,13 @@ compatibility_date = "2026-10-01"
 binding = "DB"
 database_name = "visitor-id"
 database_id = "___database-id"
+
+# Daily 06:20 UTC: IP → company for the page views from /t.js, ip wiped after 7 days.
+# Optional secrets: MOLTSETS_KEY (company by IP, 1 token per hit; without it a corporate network name is used),
+# vars: SITE_HOSTS = "you.com" (only these sites may post page views), MAX_RESOLVE = "50".
+[vars]
+SITE_HOSTS = ""        # your domain, e.g. "you.com" — empty = accept any site
+MAX_RESOLVE = "50"
+
+[triggers]
+crons = ["20 6 * * *"]
