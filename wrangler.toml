@@ -2,6 +2,7 @@ name = "visitor-id"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 # The hook URL carries a secret: npx wrangler secret put HOOK_SECRET  (any long random string).
+# The visits page /view/<VIEW_KEY> needs its own: npx wrangler secret put VIEW_KEY
 
 [[d1_databases]]
 binding = "DB"

@@ -1,13 +1,13 @@
 ---
 name: visitor-id
-description: Turns website visits into outreach signals for a B2B service company. Sets up a small Cloudflare Worker + D1 that receives visitors from RB2B (person-level, US traffic) or any company-by-IP tool (Snitcher, Leadfeeder, Dealfront, LinkedIn Insight Tag exports), then exports the last N days as a signal CSV - company, date, the page that proves intent, and a route A (write this week) or B (wait for a second signal) - ready for the prospect list and CRM. Use when someone says "хто заходив на сайт", "visitor identification", "visitor ID", "RB2B", "ідентифікація відвідувачів", "відвідувачі сайту в аутріч", "website visitors to leads", "intent from website", or sets up intent signals for outbound. NOT for web analytics or traffic reports (use Search Console or GA), NOT for signals that are events outside your site (jobs, funding, tenders - that is the signal radar).
+description: Turns website visits into outreach signals for a B2B service company. Sets up a small Cloudflare Worker + D1 that receives visitors from RB2B (person-level, US traffic) or any company-by-IP tool (Snitcher, Leadfeeder, Dealfront, LinkedIn Insight Tag exports), shows them on a private page and exports the last N days as a signal CSV - company, date, the page that proves intent, and a route A (write this week) or B (wait for a second signal) - ready for the prospect list and CRM. Use when someone says "хто заходив на сайт", "visitor identification", "visitor ID", "RB2B", "ідентифікація відвідувачів", "відвідувачі сайту в аутріч", "website visitors to leads", "intent from website", or sets up intent signals for outbound. NOT for web analytics or traffic reports (use Search Console or GA), NOT for signals that are events outside your site (jobs, funding, tenders - that is the signal radar).
 ---
 
 # Visitor ID
 
 A visit to your site is an intent signal: the person already knows you. This skill collects visits in one place and hands them to outreach in the same columns as any other signal.
 
-The code lives in this repository: `worker.js` (receiver), `schema.sql`, `wrangler.toml`, `export.py`. This skill drives it: setup, connecting a source, the weekly export and the routing rules.
+The code lives in this repository: `worker.js` (receiver + visits page), `schema.sql`, `wrangler.toml`, `export.py`. This skill drives it: setup, connecting a source, the weekly export and the routing rules.
 
 ## Required tools
 
@@ -41,11 +41,12 @@ npx wrangler login
 npx wrangler d1 create visitor-id            # put database_id into wrangler.toml
 npx wrangler d1 execute visitor-id --remote --file=schema.sql
 npx wrangler secret put HOOK_SECRET          # any long random string; the user types it, not you
+npx wrangler secret put VIEW_KEY             # a different long random string: the key to the visits page
 npx wrangler deploy
 curl https://visitor-id.<account>.workers.dev/health   # ok
 ```
 
-Never print or store the secret in chat. The hook URL is `https://visitor-id.<account>.workers.dev/hook/<HOOK_SECRET>`.
+Never print or store the secrets in chat. The hook URL is `https://visitor-id.<account>.workers.dev/hook/<HOOK_SECRET>`. The visits page is `https://visitor-id.<account>.workers.dev/view/<VIEW_KEY>`: tell the user to bookmark it. Without `VIEW_KEY` the page does not exist.
 
 ## 3. Connect a source
 
@@ -65,7 +66,13 @@ Visits only become attributable when links carry marks. Help the user set them u
 
 `export.py` reads `utm_source`, `utm_campaign` and `ref` from the visited page URL. A visit with `ref` is a known person coming back: route A, in any country, even when no tool identified the company.
 
-## 4. Weekly export
+## 4. The visits page
+
+`/view/<VIEW_KEY>` shows the visits without any command: one row per company, number of visits, last visit, the evidence page, the people (RB2B), the marks (`utm_source`, `utm_campaign`, `ref`) and route A or B. Switches for 7, 30 and 90 days, a «лише черга A» filter and a CSV button that downloads the same rows (`/view/<VIEW_KEY>/visits.csv?days=7`). The page is `noindex` and lives only behind the key. Anyone with the link sees the visits, so it is shared like a password.
+
+## 5. Weekly export
+
+The CSV button on the page is enough for most users. From the terminal:
 
 ```bash
 python3 export.py --days 7            # state/visitor_signals.csv
@@ -76,7 +83,7 @@ One row per company. Columns match the signal block of a prospect list: `signal_
 - **Route A**: looked at pricing, cases, contact or services pages, or came 3+ times. Write this week.
 - **Route B**: everything else. Wait for a second signal.
 
-## 5. Into outreach
+## 6. Into outreach
 
 1. Run the same stop filters as any list: ICP fit, size, current clients, competitors, existing open deals. Show the user how many companies dropped and why.
 2. For a company without a person: find the decision maker and a champion under the company (2-3 people).
@@ -87,6 +94,6 @@ One row per company. Columns match the signal block of a prospect list: `signal_
 
 ## Done when
 
-- `/health` answers `ok` and a test visit is in D1
+- `/health` answers `ok` and a test visit is in D1 and on the visits page
 - the first week is exported and the A companies were checked by eye
 - A companies from the ICP are in the CRM with the signal and date
